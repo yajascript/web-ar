@@ -251,6 +251,54 @@ export default function SpatialPlayground(): React.JSX.Element {
     }
   };
 
+  const handleExportPhoto = async () => {
+    try {
+      const bgImg = document.querySelector(`.${styles.bgImage}`) as HTMLImageElement;
+      const webglCanvas = document.querySelector('canvas') as HTMLCanvasElement;
+      
+      if (!bgImg || !webglCanvas) return;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = webglCanvas.width;
+      canvas.height = webglCanvas.height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Draw background image using object-fit: contain logic
+      const imgRatio = bgImg.naturalWidth / bgImg.naturalHeight;
+      const canvasRatio = canvas.width / canvas.height;
+      let drawWidth = canvas.width;
+      let drawHeight = canvas.height;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (imgRatio > canvasRatio) {
+        drawWidth = canvas.width;
+        drawHeight = canvas.width / imgRatio;
+        offsetY = (canvas.height - drawHeight) / 2;
+      } else {
+        drawHeight = canvas.height;
+        drawWidth = canvas.height * imgRatio;
+        offsetX = (canvas.width - drawWidth) / 2;
+      }
+
+      ctx.drawImage(bgImg, offsetX, offsetY, drawWidth, drawHeight);
+
+      // Draw WebGL canvas on top
+      ctx.drawImage(webglCanvas, 0, 0);
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `webar-export-${Date.now()}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      console.error("Export failed", e);
+      alert("Failed to export photo.");
+    }
+  };
+
   return (
     <main className={styles.main}>
       <div className={styles.container}>
@@ -341,7 +389,7 @@ export default function SpatialPlayground(): React.JSX.Element {
             >
               {placedObjects.length > 0 && (
                 <button
-                  onClick={() => alert("Save photo coming soon!")}
+                  onClick={handleExportPhoto}
                   style={{
                     position: 'absolute', top: '1.5rem', right: '1.5rem', zIndex: 10,
                     background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)',
@@ -360,7 +408,7 @@ export default function SpatialPlayground(): React.JSX.Element {
                 ref={pinchLayerRef}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'auto' }}
               >
-                <Canvas onPointerMissed={() => setSelectedObjectId(null)}>
+                <Canvas gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelectedObjectId(null)}>
                   <PerspectiveCamera
                     makeDefault
                     position={[0, camY, 5]}
