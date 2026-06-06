@@ -2,69 +2,69 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGLTF, DragControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { Select } from '@react-three/postprocessing';
+import type { PlacedObject } from '../app/page';
 
-const ModelRenderer = React.forwardRef(({
-  url, scale, rotationX, rotationY, rotationZ, isSelected, setIsSelected,
-  interactionMode, setRotationX, setRotationY
+export default function ModelRenderer({
+  object,
+  isSelected,
+  onSelect,
+  updateObject,
+  interactionMode
 }: {
-  url: string, scale: number, rotationX: number, rotationY: number, rotationZ: number, isSelected: boolean, setIsSelected: (s: boolean) => void,
-  interactionMode: 'move' | 'rotate', setRotationX: (v: React.SetStateAction<number>) => void, setRotationY: (v: React.SetStateAction<number>) => void,
-}, ref) => {
-  const { scene } = useGLTF(url);
+  object: PlacedObject;
+  isSelected: boolean;
+  onSelect: () => void;
+  updateObject: (id: string, updates: Partial<PlacedObject>) => void;
+  interactionMode: 'move' | 'rotate' | 'scale';
+}) {
+  const { scene } = useGLTF(object.src);
   const [isRotating, setIsRotating] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
+  const [isScaling, setIsScaling] = useState(false);
   const groupRef = useRef<THREE.Group>(null);
   const pointerRef = useRef({ x: 0, y: 0 });
 
-  React.useImperativeHandle(ref, () => ({
-    reset: (mode: 'move' | 'rotate' | 'all') => {
-      if (!groupRef.current) return;
-      if (mode === 'move' || mode === 'all') {
-        setResetKey(k => k + 1);
-      }
-      if (mode === 'rotate' || mode === 'all') {
-        groupRef.current.rotation.set(0, 0, 0);
-        setRotationX(0);
-        setRotationY(0);
-      }
-    },
-    nudge: (dx: number, dy: number, dz: number) => {
-      if (groupRef.current) {
-        groupRef.current.position.x += dx;
-        groupRef.current.position.y += dy;
-        groupRef.current.position.z += dz;
-      }
-    }
-  }));
-
   useEffect(() => {
     if (groupRef.current && !isRotating) {
-      groupRef.current.rotation.x = rotationX;
-      groupRef.current.rotation.y = rotationY;
-      groupRef.current.rotation.z = rotationZ;
+      groupRef.current.rotation.set(object.rotationX, object.rotationY, object.rotationZ);
     }
-  }, [rotationX, rotationY, rotationZ, isRotating]);
+  }, [object.rotationX, object.rotationY, object.rotationZ, isRotating]);
 
-  // Handle global pointer moves for rotation to completely bypass R3F raycast lag
+  // Handle global pointer moves for rotation and scaling to completely bypass R3F raycast lag
   useEffect(() => {
-    if (!isRotating) return;
+    if (!isRotating && !isScaling) return;
 
     const onPointerMove = (e: PointerEvent) => {
       const deltaX = e.clientX - pointerRef.current.x;
       const deltaY = e.clientY - pointerRef.current.y;
       pointerRef.current = { x: e.clientX, y: e.clientY };
 
-      if (groupRef.current) {
+      if (isRotating && groupRef.current) {
         groupRef.current.rotation.y += deltaX * 0.01;
         groupRef.current.rotation.x += deltaY * 0.01;
+      } else if (isScaling && groupRef.current) {
+        const scaleFactor = 1 - deltaY * 0.005;
+        const newScale = Math.max(0.1, Math.min(10, object.scale * scaleFactor));
+        groupRef.current.scale.set(newScale, newScale, newScale);
       }
     };
 
     const onPointerUp = () => {
-      setIsRotating(false);
-      if (groupRef.current) {
-        setRotationX(groupRef.current.rotation.x);
-        setRotationY(groupRef.current.rotation.y);
+      if (isRotating) {
+        setIsRotating(false);
+        if (groupRef.current) {
+          updateObject(object.instanceId, {
+            rotationX: groupRef.current.rotation.x,
+            rotationY: groupRef.current.rotation.y
+          });
+        }
+      }
+      if (isScaling) {
+        setIsScaling(false);
+        if (groupRef.current) {
+          updateObject(object.instanceId, {
+            scale: groupRef.current.scale.x
+          });
+        }
       }
     };
 
@@ -74,19 +74,35 @@ const ModelRenderer = React.forwardRef(({
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [isRotating, setRotationX, setRotationY]);
+  }, [isRotating, isScaling, object.instanceId, updateObject, object.scale]);
 
   return (
-    <DragControls key={resetKey} axisLock="y" onDragStart={() => setIsSelected(true)}>
+    <DragControls 
+      axisLock="y" 
+      onDragStart={() => onSelect()}
+      onDragEnd={() => {
+        if (groupRef.current) {
+           updateObject(object.instanceId, {
+            positionX: groupRef.current.position.x,
+            positionY: groupRef.current.position.y,
+            positionZ: groupRef.current.position.z
+          });
+        }
+      }}
+    >
       <group
         ref={groupRef}
-        position={[0, 0, -3]}
-        scale={scale}
-        onClick={(e) => { e.stopPropagation(); setIsSelected(true); }}
+        position={[object.positionX, object.positionY, object.positionZ]}
+        scale={object.scale}
+        onClick={(e) => { e.stopPropagation(); onSelect(); }}
         onPointerDown={(e) => {
           if (interactionMode === 'rotate') {
             e.stopPropagation();
             setIsRotating(true);
+            pointerRef.current = { x: e.clientX, y: e.clientY };
+          } else if (interactionMode === 'scale') {
+            e.stopPropagation();
+            setIsScaling(true);
             pointerRef.current = { x: e.clientX, y: e.clientY };
           }
         }}
@@ -97,8 +113,4 @@ const ModelRenderer = React.forwardRef(({
       </group>
     </DragControls>
   );
-});
-
-ModelRenderer.displayName = 'ModelRenderer';
-
-export default ModelRenderer;
+}

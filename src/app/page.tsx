@@ -27,17 +27,32 @@ declare global {
     }
   }
 }
+export type PlacedObject = {
+  instanceId: string;
+  modelId: string;
+  src: string;
+  scale: number;
+  rotationX: number;
+  rotationY: number;
+  rotationZ: number;
+  positionX: number;
+  positionY: number;
+  positionZ: number;
+};
 
 export default function SpatialPlayground(): React.JSX.Element {
   const [uploadedSceneUrl, setUploadedSceneUrl] = useState<string | null>(null);
   const [isSelected, setIsSelected] = useState(false);
-  const [interactionMode, setInteractionMode] = useState<'move' | 'rotate'>('move');
+  const [interactionMode, setInteractionMode] = useState<'move' | 'rotate' | 'scale'>('move');
 
-  // Model Transform State
-  const [modelScale, setModelScale] = useState(1.0);
-  const [modelRotationX, setModelRotationX] = useState(0);
-  const [modelRotationY, setModelRotationY] = useState(0);
-  const [modelRotationZ, setModelRotationZ] = useState(0);
+  // Placed Objects State
+  const [placedObjects, setPlacedObjects] = useState<PlacedObject[]>([]);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [clipboardData, setClipboardData] = useState<Partial<PlacedObject> | null>(null);
+
+  const updateObject = (id: string, updates: Partial<PlacedObject>) => {
+    setPlacedObjects(prev => prev.map(obj => obj.instanceId === id ? { ...obj, ...updates } : obj));
+  };
 
   // Calibration State
   const [camY, setCamY] = useState(1.5);
@@ -45,11 +60,8 @@ export default function SpatialPlayground(): React.JSX.Element {
   const [camYaw, setCamYaw] = useState(0);
   const [camFov, setCamFov] = useState(65);
 
-  const modelRef = useRef<{ reset: (mode: string) => void, nudge: (dx: number, dy: number, dz: number) => void }>(null);
-
   // Dynamic Models State
   const [dynamicModels, setDynamicModels] = useState<any[]>([]);
-  const [selectedModel, setSelectedModel] = useState<any>(null);
   const [dynamicRooms, setDynamicRooms] = useState<any[]>([]);
   const [uploadedImages, setUploadedImages] = useState<{ id: string, name: string, src: string }[]>([]);
 
@@ -59,7 +71,6 @@ export default function SpatialPlayground(): React.JSX.Element {
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           setDynamicModels(data);
-          setSelectedModel(data[0]);
         }
       })
       .catch(err => console.error("Failed to load models", err));
@@ -80,16 +91,15 @@ export default function SpatialPlayground(): React.JSX.Element {
   const pinchLayerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    initialPinchScale.current = modelScale;
-  }, [modelScale]);
-
-  useEffect(() => {
     const el = pinchLayerRef.current;
-    if (!el || !isSelected) return;
+    if (!el || !selectedObjectId) return;
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      setModelScale(prev => Math.max(0.25, Math.min(3.0, prev - e.deltaY * 0.005)));
+      setPlacedObjects(prev => prev.map(obj => {
+        if (obj.instanceId !== selectedObjectId) return obj;
+        return { ...obj, scale: Math.max(0.25, Math.min(3.0, obj.scale - e.deltaY * 0.005)) };
+      }));
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -98,6 +108,8 @@ export default function SpatialPlayground(): React.JSX.Element {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         initialPinchDist.current = Math.hypot(dx, dy);
+        const activeObj = placedObjects.find(o => o.instanceId === selectedObjectId);
+        if (activeObj) initialPinchScale.current = activeObj.scale;
       }
     };
 
@@ -108,7 +120,10 @@ export default function SpatialPlayground(): React.JSX.Element {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.hypot(dx, dy);
         const scaleFactor = dist / initialPinchDist.current;
-        setModelScale(Math.max(0.25, Math.min(3.0, initialPinchScale.current * scaleFactor)));
+        setPlacedObjects(prev => prev.map(obj => {
+          if (obj.instanceId !== selectedObjectId) return obj;
+          return { ...obj, scale: Math.max(0.25, Math.min(3.0, initialPinchScale.current * scaleFactor)) };
+        }));
       }
     };
 
@@ -129,7 +144,7 @@ export default function SpatialPlayground(): React.JSX.Element {
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
     };
-  }, [isSelected]);
+  }, [selectedObjectId, placedObjects, interactionMode]);
 
   // Auto-calibrate when photo changes (mock AI guess)
   useEffect(() => {
@@ -149,34 +164,75 @@ export default function SpatialPlayground(): React.JSX.Element {
         case 'r':
           setInteractionMode('rotate');
           break;
+        case 's':
+          setInteractionMode('scale');
+          break;
+        case 'c':
+          if ((e.metaKey || e.ctrlKey) && selectedObjectId) {
+            e.preventDefault();
+            const activeObj = placedObjects.find(o => o.instanceId === selectedObjectId);
+            if (activeObj) setClipboardData(activeObj);
+          }
+          break;
+        case 'x':
+          if ((e.metaKey || e.ctrlKey) && selectedObjectId) {
+            e.preventDefault();
+            const activeObj = placedObjects.find(o => o.instanceId === selectedObjectId);
+            if (activeObj) {
+              setClipboardData(activeObj);
+              setPlacedObjects(prev => prev.filter(obj => obj.instanceId !== selectedObjectId));
+              setSelectedObjectId(null);
+            }
+          }
+          break;
+        case 'v':
+          if ((e.metaKey || e.ctrlKey) && clipboardData) {
+            e.preventDefault();
+            const newObj: PlacedObject = {
+              ...clipboardData as PlacedObject,
+              instanceId: Math.random().toString(36).substr(2, 9),
+              positionX: clipboardData.positionX! + 0.5,
+              positionZ: clipboardData.positionZ! + 0.5
+            };
+            setPlacedObjects(prev => [...prev, newObj]);
+            setSelectedObjectId(newObj.instanceId);
+          }
+          break;
         case 'escape':
-          setIsSelected(false);
+          setSelectedObjectId(null);
           break;
         case 'backspace':
         case 'delete':
-          if (isSelected) {
-            setSelectedModel(null);
-            setIsSelected(false);
+          if (selectedObjectId) {
+            setPlacedObjects(prev => prev.filter(obj => obj.instanceId !== selectedObjectId));
+            setSelectedObjectId(null);
           }
           break;
         case 'arrowup':
         case 'arrowdown':
         case 'arrowleft':
         case 'arrowright':
-          if (!isSelected) return;
+          if (!selectedObjectId) return;
           e.preventDefault();
+          const activeObj = placedObjects.find(o => o.instanceId === selectedObjectId);
+          if (!activeObj) return;
+
           if (interactionMode === 'rotate') {
             const step = 5 * (Math.PI / 180);
-            if (e.key === 'ArrowUp') setModelRotationX(r => r - step);
-            if (e.key === 'ArrowDown') setModelRotationX(r => r + step);
-            if (e.key === 'ArrowLeft') setModelRotationY(r => r - step);
-            if (e.key === 'ArrowRight') setModelRotationY(r => r + step);
+            if (e.key === 'ArrowUp') updateObject(selectedObjectId, { rotationX: activeObj.rotationX - step });
+            if (e.key === 'ArrowDown') updateObject(selectedObjectId, { rotationX: activeObj.rotationX + step });
+            if (e.key === 'ArrowLeft') updateObject(selectedObjectId, { rotationY: activeObj.rotationY - step });
+            if (e.key === 'ArrowRight') updateObject(selectedObjectId, { rotationY: activeObj.rotationY + step });
           } else if (interactionMode === 'move') {
             const step = 0.1;
-            if (e.key === 'ArrowUp') modelRef.current?.nudge(0, 0, -step);
-            if (e.key === 'ArrowDown') modelRef.current?.nudge(0, 0, step);
-            if (e.key === 'ArrowLeft') modelRef.current?.nudge(-step, 0, 0);
-            if (e.key === 'ArrowRight') modelRef.current?.nudge(step, 0, 0);
+            if (e.key === 'ArrowUp') updateObject(selectedObjectId, { positionZ: activeObj.positionZ - step });
+            if (e.key === 'ArrowDown') updateObject(selectedObjectId, { positionZ: activeObj.positionZ + step });
+            if (e.key === 'ArrowLeft') updateObject(selectedObjectId, { positionX: activeObj.positionX - step });
+            if (e.key === 'ArrowRight') updateObject(selectedObjectId, { positionX: activeObj.positionX + step });
+          } else if (interactionMode === 'scale') {
+            const step = 0.05;
+            if (e.key === 'ArrowUp' || e.key === 'ArrowRight') updateObject(selectedObjectId, { scale: Math.min(3.0, activeObj.scale + step) });
+            if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') updateObject(selectedObjectId, { scale: Math.max(0.25, activeObj.scale - step) });
           }
           break;
       }
@@ -184,7 +240,7 @@ export default function SpatialPlayground(): React.JSX.Element {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSelected, interactionMode]);
+  }, [selectedObjectId, interactionMode, placedObjects, clipboardData]);
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -192,7 +248,6 @@ export default function SpatialPlayground(): React.JSX.Element {
       const url = URL.createObjectURL(file);
       setUploadedSceneUrl(url);
       setUploadedImages(prev => [...prev, { id: url, name: file.name.substring(0, 10), src: url }]);
-      setIsSelected(true);
     }
   };
 
@@ -227,7 +282,7 @@ export default function SpatialPlayground(): React.JSX.Element {
               <ThumbnailCard
                 key={bg.id}
                 isActive={uploadedSceneUrl === bg.src}
-                onClick={() => { setUploadedSceneUrl(bg.src); setIsSelected(true); }}
+                onClick={() => { setUploadedSceneUrl(bg.src); }}
                 name={bg.name}
                 imageSrc={bg.src}
               />
@@ -240,8 +295,23 @@ export default function SpatialPlayground(): React.JSX.Element {
             {dynamicModels.map(m => (
               <ThumbnailCard
                 key={m.id}
-                isActive={selectedModel?.id === m.id}
-                onClick={() => setSelectedModel(m)}
+                isActive={false}
+                onClick={() => {
+                  const newObj: PlacedObject = {
+                    instanceId: Math.random().toString(36).substr(2, 9),
+                    modelId: m.id,
+                    src: m.src,
+                    scale: 1.0,
+                    rotationX: 0,
+                    rotationY: 0,
+                    rotationZ: 0,
+                    positionX: 0,
+                    positionY: 0,
+                    positionZ: -3
+                  };
+                  setPlacedObjects(prev => [...prev, newObj]);
+                  setSelectedObjectId(newObj.instanceId);
+                }}
                 name={m.name}
                 modelSrc={m.src}
               />
@@ -250,14 +320,17 @@ export default function SpatialPlayground(): React.JSX.Element {
         </aside>
 
         <section className={styles.viewport} style={{ position: 'relative' }}>
-          {isSelected && (
+          {selectedObjectId && placedObjects.find(o => o.instanceId === selectedObjectId) && (
             <FloatingControls
-              modelScale={modelScale}
-              setModelScale={setModelScale}
+              activeObject={placedObjects.find(o => o.instanceId === selectedObjectId)!}
+              updateObject={updateObject}
               interactionMode={interactionMode}
               setInteractionMode={setInteractionMode}
-              modelRef={modelRef}
-              setIsSelected={setIsSelected}
+              onClose={() => setSelectedObjectId(null)}
+              onRemove={() => {
+                setPlacedObjects(prev => prev.filter(obj => obj.instanceId !== selectedObjectId));
+                setSelectedObjectId(null);
+              }}
             />
           )}
 
@@ -266,13 +339,28 @@ export default function SpatialPlayground(): React.JSX.Element {
               className={styles.canvasCompositeBridge}
               style={{ touchAction: 'none' }}
             >
+              {placedObjects.length > 0 && (
+                <button
+                  onClick={() => alert("Save photo coming soon!")}
+                  style={{
+                    position: 'absolute', top: '1.5rem', right: '1.5rem', zIndex: 10,
+                    background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)',
+                    color: 'white', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Save Photo
+                </button>
+              )}
+
               <img src={uploadedSceneUrl} alt="Background" className={styles.bgImage} draggable={false} />
 
               <div
                 ref={pinchLayerRef}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'auto' }}
               >
-                <Canvas onPointerMissed={() => setIsSelected(false)}>
+                <Canvas onPointerMissed={() => setSelectedObjectId(null)}>
                   <PerspectiveCamera
                     makeDefault
                     position={[0, camY, 5]}
@@ -281,30 +369,24 @@ export default function SpatialPlayground(): React.JSX.Element {
                   />
                   <ambientLight intensity={0.5} />
                   <directionalLight position={[10, 10, 5]} intensity={1} />
-                  <Environment preset="apartment" />
+                  <Environment preset="city" />
 
                   <Selection>
                     <EffectComposer autoClear={false}>
                       <Outline blur visibleEdgeColor={0x3b82f6} edgeStrength={1.5} width={1000} />
                     </EffectComposer>
 
-                    <React.Suspense fallback={null}>
-                      {selectedModel && (
+                    {placedObjects.map(obj => (
+                      <React.Suspense key={obj.instanceId} fallback={null}>
                         <ModelRenderer
-                          ref={modelRef}
-                          url={selectedModel.src}
-                          scale={modelScale}
-                          rotationX={modelRotationX}
-                          rotationY={modelRotationY}
-                          rotationZ={modelRotationZ}
-                          isSelected={isSelected}
-                          setIsSelected={setIsSelected}
+                          object={obj}
+                          isSelected={selectedObjectId === obj.instanceId}
+                          onSelect={() => setSelectedObjectId(obj.instanceId)}
+                          updateObject={updateObject}
                           interactionMode={interactionMode}
-                          setRotationX={setModelRotationX}
-                          setRotationY={setModelRotationY}
                         />
-                      )}
-                    </React.Suspense>
+                      </React.Suspense>
+                    ))}
                   </Selection>
                 </Canvas>
               </div>
