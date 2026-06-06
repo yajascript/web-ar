@@ -45,11 +45,30 @@ export default function FloatingControls({
           <span style={{ color: '#ccc', fontSize: '0.8rem', fontWeight: 'bold' }}>Size</span>
           <div style={{ flex: 1, position: 'relative' }}>
             <input
-              type="range" min="0.25" max="2" step="0.05"
+              type="range" min="0.25" max="3" step="any"
+              list="scale-ticks"
               value={activeObject.scale}
-              onChange={(e) => updateObject(activeObject.instanceId, { scale: parseFloat(e.target.value) })}
+              onChange={(e) => {
+                updateObject(activeObject.instanceId, { scale: parseFloat(e.target.value) });
+              }}
               style={{ width: '100%', cursor: 'pointer', margin: 0, position: 'relative', zIndex: 1 }}
             />
+            <datalist id="scale-ticks">
+              <option value="0.25" />
+              <option value="0.5" />
+              <option value="0.75" />
+              <option value="1" />
+              <option value="1.5" />
+              <option value="2" />
+              <option value="2.5" />
+              <option value="3" />
+            </datalist>
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, color: '#888', fontSize: '0.55rem', fontWeight: 'bold', pointerEvents: 'none', marginTop: '4px' }}>
+              <span style={{ position: 'absolute', left: '0%', transform: 'translateX(0%)' }}>0.25x</span>
+              <span style={{ position: 'absolute', left: `${((1 - 0.25) / 2.75) * 100}%`, transform: 'translateX(-50%)' }}>1x</span>
+              <span style={{ position: 'absolute', left: `${((2 - 0.25) / 2.75) * 100}%`, transform: 'translateX(-50%)' }}>2x</span>
+              <span style={{ position: 'absolute', left: '100%', transform: 'translateX(-100%)' }}>3x</span>
+            </div>
           </div>
         </div>
 
@@ -66,7 +85,7 @@ export default function FloatingControls({
 
       {/* Secondary Actions Bar (Right Panel) */}
       <div style={{
-        position: 'absolute', top: '2rem', right: '2rem',
+        position: 'absolute', top: '2rem', right: '2rem', minWidth: '200px',
         background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
         border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px',
         padding: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.8rem',
@@ -74,13 +93,38 @@ export default function FloatingControls({
       }}>
         <div style={{ color: 'white', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem', opacity: 0.7 }}>Object Tools</div>
         
-        <button onClick={() => updateObject(activeObject.instanceId, { positionX: 0, positionY: 0, positionZ: -3 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.6rem 1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', marginBottom: '0.2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', fontSize: '0.8rem', fontWeight: 500 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            <span>Ambient Light</span>
+          </div>
+          <div 
+            onClick={() => updateObject(activeObject.instanceId, { matchLighting: !activeObject.matchLighting })}
+            style={{ 
+              width: '40px', height: '22px', borderRadius: '11px', flexShrink: 0,
+              background: activeObject.matchLighting ? '#3b82f6' : 'rgba(255,255,255,0.2)', 
+              position: 'relative', cursor: 'pointer', transition: 'background 0.3s'
+            }}>
+            <div style={{
+              width: '18px', height: '18px', borderRadius: '50%', background: 'white',
+              position: 'absolute', top: '2px', left: activeObject.matchLighting ? '20px' : '2px',
+              transition: 'left 0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }} />
+          </div>
+        </div>
+
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', margin: '0.1rem 0' }} />
+
+        <button onClick={() => updateObject(activeObject.instanceId, { positionX: 0, positionY: 0, positionZ: -3, resetKey: (activeObject.resetKey || 0) + 1 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
           Reset Position
         </button>
-        <button onClick={() => updateObject(activeObject.instanceId, { rotationX: 0, rotationY: 0, rotationZ: 0 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500 }}>
+        <button onClick={() => updateObject(activeObject.instanceId, { rotationX: 0, rotationY: 0, rotationZ: 0 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
           Reset Rotation
         </button>
-        <button onClick={() => updateObject(activeObject.instanceId, { scale: 1.0 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500 }}>
+        <button onClick={() => updateObject(activeObject.instanceId, { scale: 1.0 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
           Reset Size
         </button>
 

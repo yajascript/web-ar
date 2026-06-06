@@ -38,6 +38,8 @@ export type PlacedObject = {
   positionX: number;
   positionY: number;
   positionZ: number;
+  matchLighting?: boolean;
+  resetKey?: number;
 };
 
 export default function SpatialPlayground(): React.JSX.Element {
@@ -50,6 +52,13 @@ export default function SpatialPlayground(): React.JSX.Element {
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [clipboardData, setClipboardData] = useState<Partial<PlacedObject> | null>(null);
 
+  // Lighting State
+  const [ambientLightColor, setAmbientLightColor] = useState<string>('#ffffff');
+  const [ambientLightIntensity, setAmbientLightIntensity] = useState<number>(0.5);
+  
+  // UI State
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+
   const updateObject = (id: string, updates: Partial<PlacedObject>) => {
     setPlacedObjects(prev => prev.map(obj => obj.instanceId === id ? { ...obj, ...updates } : obj));
   };
@@ -59,6 +68,9 @@ export default function SpatialPlayground(): React.JSX.Element {
   const [camPitch, setCamPitch] = useState(-15);
   const [camYaw, setCamYaw] = useState(0);
   const [camFov, setCamFov] = useState(65);
+
+  const [isExporting, setIsExporting] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Dynamic Models State
   const [dynamicModels, setDynamicModels] = useState<any[]>([]);
@@ -146,26 +158,98 @@ export default function SpatialPlayground(): React.JSX.Element {
     };
   }, [selectedObjectId, placedObjects, interactionMode]);
 
-  // Auto-calibrate when photo changes (mock AI guess)
+  // Auto-calibrate and Ambient Light Match when photo changes
   useEffect(() => {
     if (!uploadedSceneUrl) return;
     setCamY(1.5); // Average standing height (approx 1.5m / 5ft)
     setCamPitch(-15); // Looking slightly down into the room
     setCamFov(65); // Wide-angle phone camera default
+
+    // Light Matching
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      canvas.width = 64; 
+      canvas.height = 64;
+      ctx.drawImage(img, 0, 0, 64, 64);
+      const data = ctx.getImageData(0, 0, 64, 64).data;
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        r += data[i];
+        g += data[i+1];
+        b += data[i+2];
+      }
+      const count = data.length / 4;
+      r = Math.floor(r / count);
+      g = Math.floor(g / count);
+      b = Math.floor(b / count);
+      
+      const hex = '#' + [r, g, b].map(x => {
+        const hexStr = x.toString(16);
+        return hexStr.length === 1 ? '0' + hexStr : hexStr;
+      }).join('');
+      
+      setAmbientLightColor(hex);
+      
+      // Calculate brightness for intensity (perceived luminance)
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+      // Map brightness 0-255 to intensity 0.2 - 1.2
+      setAmbientLightIntensity(Math.max(0.2, (brightness / 255) * 1.2));
+    };
+    img.src = uploadedSceneUrl;
   }, [uploadedSceneUrl]);
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // If the shortcuts modal is open, Esc should close it and we ignore other keys
+      if (showShortcuts) {
+        if (e.key === 'Escape') {
+          setShowShortcuts(false);
+        }
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        setSelectedObjectId(null);
+        return;
+      }
+
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       switch (e.key.toLowerCase()) {
         case 'm':
-          setInteractionMode('move');
+          if (e.shiftKey && selectedObjectId) {
+            const activeObj = placedObjects.find(o => o.instanceId === selectedObjectId);
+            if (activeObj) {
+              updateObject(selectedObjectId, { positionX: 0, positionY: 0, positionZ: -3, resetKey: (activeObj.resetKey || 0) + 1 });
+            }
+          } else {
+            setInteractionMode('move');
+          }
           break;
         case 'r':
-          setInteractionMode('rotate');
+          if (e.shiftKey && selectedObjectId) {
+            updateObject(selectedObjectId, { rotationX: 0, rotationY: 0, rotationZ: 0 });
+          } else {
+            setInteractionMode('rotate');
+          }
           break;
         case 's':
-          setInteractionMode('scale');
+          if (e.shiftKey && selectedObjectId) {
+            updateObject(selectedObjectId, { scale: 1.0 });
+          } else {
+            setInteractionMode('scale');
+          }
+          break;
+        case 'a':
+          if (selectedObjectId) {
+            const activeObj = placedObjects.find(o => o.instanceId === selectedObjectId);
+            if (activeObj) {
+              updateObject(selectedObjectId, { matchLighting: !activeObj.matchLighting });
+            }
+          }
           break;
         case 'c':
           if ((e.metaKey || e.ctrlKey) && selectedObjectId) {
@@ -196,6 +280,7 @@ export default function SpatialPlayground(): React.JSX.Element {
             };
             setPlacedObjects(prev => [...prev, newObj]);
             setSelectedObjectId(newObj.instanceId);
+            setInteractionMode('move');
           }
           break;
         case 'escape':
@@ -240,7 +325,7 @@ export default function SpatialPlayground(): React.JSX.Element {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedObjectId, interactionMode, placedObjects, clipboardData]);
+  }, [selectedObjectId, interactionMode, placedObjects, clipboardData, showShortcuts]);
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -252,16 +337,19 @@ export default function SpatialPlayground(): React.JSX.Element {
   };
 
   const handleExportPhoto = async () => {
+    setIsExporting(true);
     try {
+      await new Promise(resolve => setTimeout(resolve, 50)); // Slight delay to show UI
+
       const bgImg = document.querySelector(`.${styles.bgImage}`) as HTMLImageElement;
       const webglCanvas = document.querySelector('canvas') as HTMLCanvasElement;
-      
+
       if (!bgImg || !webglCanvas) return;
 
       const canvas = document.createElement('canvas');
       canvas.width = webglCanvas.width;
       canvas.height = webglCanvas.height;
-      
+
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -290,12 +378,13 @@ export default function SpatialPlayground(): React.JSX.Element {
 
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.download = `webar-export-${Date.now()}.png`;
+      link.download = 'webar-room-export.png';
       link.href = dataUrl;
       link.click();
-    } catch (e) {
-      console.error("Export failed", e);
-      alert("Failed to export photo.");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -343,8 +432,10 @@ export default function SpatialPlayground(): React.JSX.Element {
             {dynamicModels.map(m => (
               <ThumbnailCard
                 key={m.id}
+                disabled={!uploadedSceneUrl}
                 isActive={false}
                 onClick={() => {
+                  if (!uploadedSceneUrl) return;
                   const newObj: PlacedObject = {
                     instanceId: Math.random().toString(36).substr(2, 9),
                     modelId: m.id,
@@ -355,10 +446,12 @@ export default function SpatialPlayground(): React.JSX.Element {
                     rotationZ: 0,
                     positionX: 0,
                     positionY: 0,
-                    positionZ: -3
+                    positionZ: -3,
+                    matchLighting: false
                   };
                   setPlacedObjects(prev => [...prev, newObj]);
                   setSelectedObjectId(newObj.instanceId);
+                  setInteractionMode('move');
                 }}
                 name={m.name}
                 modelSrc={m.src}
@@ -387,19 +480,78 @@ export default function SpatialPlayground(): React.JSX.Element {
               className={styles.canvasCompositeBridge}
               style={{ touchAction: 'none' }}
             >
-              {placedObjects.length > 0 && (
+              {uploadedSceneUrl && placedObjects.length > 0 && (
                 <button
                   onClick={handleExportPhoto}
+                  disabled={isExporting}
                   style={{
-                    position: 'absolute', top: '1.5rem', right: '1.5rem', zIndex: 10,
-                    background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    position: 'absolute', bottom: '2rem', right: '2rem', zIndex: 10,
+                    background: '#3b82f6', color: 'white', border: 'none',
+                    padding: '1rem', borderRadius: '50%', cursor: 'pointer',
+                    boxShadow: '0 8px 20px rgba(59, 130, 246, 0.4)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s'
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  title="Export Photo"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  Save Photo
+                  {isExporting ? (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4">
+                        <animate attributeName="r" values="4;1;4" dur="0.3s" repeatCount="indefinite" />
+                      </circle>
+                      <animate attributeName="opacity" values="1;0.5;1" dur="0.3s" repeatCount="indefinite" />
+                    </svg>
+                  ) : (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                  )}
                 </button>
+              )}
+
+              {/* Shortcuts Modal Button */}
+              <button 
+                onClick={() => setShowShortcuts(true)}
+                style={{
+                  position: 'absolute', bottom: '2rem', left: '2rem', zIndex: 10,
+                  background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.2)',
+                  width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
+                }}
+                title="Keyboard Shortcuts"
+              >
+                ?
+              </button>
+
+              {/* Shortcuts Modal */}
+              {showShortcuts && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
+                  background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  backdropFilter: 'blur(4px)'
+                }}>
+                  <div style={{
+                    background: '#1a1a1a', padding: '2rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)',
+                    width: '320px', color: 'white', position: 'relative'
+                  }}>
+                    <button onClick={() => setShowShortcuts(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}>&times;</button>
+                    <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.1rem' }}>Keyboard Shortcuts</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', fontSize: '0.85rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Move</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>M</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Rotate</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>R</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Scale</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>S</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Reset Position</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>Shift + M</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Reset Rotation</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>Shift + R</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Reset Scale</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>Shift + S</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Ambient Light</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>A</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Delete Object</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>Backspace</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Copy / Paste</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>Cmd+C / Cmd+V</kbd></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Deselect</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>Esc</kbd></div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               <img src={uploadedSceneUrl} alt="Background" className={styles.bgImage} draggable={false} />
@@ -415,23 +567,38 @@ export default function SpatialPlayground(): React.JSX.Element {
                     rotation={[camPitch * (Math.PI / 180), camYaw * (Math.PI / 180), 0]}
                     fov={camFov}
                   />
-                  <ambientLight intensity={0.5} />
-                  <directionalLight position={[10, 10, 5]} intensity={1} />
-                  <Environment preset="city" />
+                  
+                  <ambientLight color="#ffffff" intensity={0.5} />
+                  <directionalLight color="#ffffff" position={[5, 5, 5]} intensity={1} />
+                  
+                  <Environment resolution={128}>
+                    <mesh scale={100}>
+                      <sphereGeometry args={[1, 16, 16]} />
+                      <meshBasicMaterial 
+                        color="#ffffff" 
+                        side={THREE.BackSide} 
+                      />
+                    </mesh>
+                  </Environment>
 
                   <Selection>
-                    <EffectComposer autoClear={false}>
-                      <Outline blur visibleEdgeColor={0x3b82f6} edgeStrength={1.5} width={1000} />
+                    <EffectComposer autoClear={false} multisampling={8}>
+                      <Outline blur visibleEdgeColor={0xffffff} edgeStrength={2.0} width={1000} />
                     </EffectComposer>
 
                     {placedObjects.map(obj => (
-                      <React.Suspense key={obj.instanceId} fallback={null}>
+                      <React.Suspense key={`${obj.instanceId}-${obj.resetKey || 0}`} fallback={null}>
                         <ModelRenderer
                           object={obj}
                           isSelected={selectedObjectId === obj.instanceId}
-                          onSelect={() => setSelectedObjectId(obj.instanceId)}
+                          onSelect={() => {
+                            if (selectedObjectId !== obj.instanceId) {
+                              setSelectedObjectId(obj.instanceId);
+                            }
+                          }}
                           updateObject={updateObject}
                           interactionMode={interactionMode}
+                          ambientLightColor={ambientLightColor}
                         />
                       </React.Suspense>
                     ))}
