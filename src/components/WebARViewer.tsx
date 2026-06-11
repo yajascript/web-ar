@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import throttle from 'lodash.throttle';
 import { Canvas } from '@react-three/fiber';
 import { PerspectiveCamera, Environment } from '@react-three/drei';
 import * as THREE from 'three';
@@ -33,7 +34,7 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
   const [isSelected, setIsSelected] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  
+
   // Lighting State
   const [ambientLightColor, setAmbientLightColor] = useState<string>('#ffffff');
   const [ambientLightIntensity, setAmbientLightIntensity] = useState<number>(0.5);
@@ -86,6 +87,7 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
       e.preventDefault();
       setActiveObject(prev => prev ? { ...prev, scale: Math.max(0.25, Math.min(3.0, prev.scale - e.deltaY * 0.005)) } : null);
     };
+    const throttledWheel = throttle(onWheel, 100);
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
@@ -108,17 +110,18 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.hypot(dx, dy);
         const angle = Math.atan2(dy, dx);
-        
+
         const scaleFactor = dist / initialPinchDist.current;
         const angleDiff = angle - initialPinchAngle.current;
-        
-        setActiveObject(prev => prev ? { 
-          ...prev, 
+
+        setActiveObject(prev => prev ? {
+          ...prev,
           scale: Math.max(0.25, Math.min(3.0, initialPinchScale.current * scaleFactor)),
           rotationY: initialPinchRotY.current + angleDiff
         } : null);
       }
     };
+    const throttledTouchMove = throttle(onTouchMove, 100);
 
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) {
@@ -127,15 +130,15 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
       }
     };
 
-    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('wheel', throttledWheel, { passive: false });
     el.addEventListener('touchstart', onTouchStart, { passive: false });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchmove', throttledTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd, { passive: false });
 
     return () => {
-      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('wheel', throttledWheel);
       el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchmove', throttledTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
     };
   }, [activeObject, isSelected]);
@@ -149,26 +152,26 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      canvas.width = 64; 
+      canvas.width = 64;
       canvas.height = 64;
       ctx.drawImage(img, 0, 0, 64, 64);
       const data = ctx.getImageData(0, 0, 64, 64).data;
       let r = 0, g = 0, b = 0;
       for (let i = 0; i < data.length; i += 4) {
         r += data[i];
-        g += data[i+1];
-        b += data[i+2];
+        g += data[i + 1];
+        b += data[i + 2];
       }
       const count = data.length / 4;
       r = Math.floor(r / count);
       g = Math.floor(g / count);
       b = Math.floor(b / count);
-      
+
       const hex = '#' + [r, g, b].map(x => {
         const hexStr = x.toString(16);
         return hexStr.length === 1 ? '0' + hexStr : hexStr;
       }).join('');
-      
+
       setAmbientLightColor(hex);
       const brightness = (r * 299 + g * 587 + b * 114) / 1000;
       setAmbientLightIntensity(Math.max(0.2, (brightness / 255) * 1.2));
@@ -196,11 +199,11 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
       switch (e.key.toLowerCase()) {
         case 'r':
           if (activeObject) {
-            updateObject(activeObject.instanceId, { 
-              positionX: 0, positionY: 0, positionZ: -3, 
-              rotationX: 0, rotationY: 0, rotationZ: 0, 
-              scale: 1.0, 
-              resetKey: (activeObject.resetKey || 0) + 1 
+            updateObject(activeObject.instanceId, {
+              positionX: 0, positionY: 0, positionZ: -3,
+              rotationX: 0, rotationY: 0, rotationZ: 0,
+              scale: 1.0,
+              resetKey: (activeObject.resetKey || 0) + 1
             });
           }
           break;
@@ -301,7 +304,7 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
 
   return (
     <div className={styles.canvasCompositeBridge} style={{ touchAction: 'none' }}>
-      
+
       {/* Shortcuts Modal */}
       {showShortcuts && (
         <div style={{
@@ -317,7 +320,7 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
             <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.1rem' }}>Keyboard Shortcuts</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', fontSize: '0.85rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Move Object</span><span style={{ color: '#aaa', fontSize: '0.75rem' }}>Left-Click + Drag</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>Rotate Object</span><span style={{ color: '#aaa', fontSize: '0.7rem', textAlign: 'right' }}>Right-Click + Drag<br/>(or Shift+Left-Click)</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>Rotate Object</span><span style={{ color: '#aaa', fontSize: '0.7rem', textAlign: 'right' }}>Right-Click + Drag<br />(or Shift+Left-Click)</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Scale Object</span><span style={{ color: '#aaa', fontSize: '0.75rem' }}>Scroll Wheel</span></div>
               <hr style={{ borderColor: 'rgba(255,255,255,0.1)', width: '100%', margin: '0.2rem 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>Reset All</span><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px' }}>R</kbd></div>
@@ -350,12 +353,12 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
 
       {/* Floating Export Button (Bottom Right) */}
       {activeObject && !isSelected && !isExporting && (
-        <button 
-          onClick={handleExportPhoto} 
-          style={{ 
+        <button
+          onClick={handleExportPhoto}
+          style={{
             position: 'absolute', bottom: '2rem', right: '2rem',
-            background: 'rgba(25,28,33,0.75)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', 
-            color: '#fff', padding: '1rem', borderRadius: '50%', cursor: 'pointer', zIndex: 100, 
+            background: 'rgba(25,28,33,0.75)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)',
+            color: '#fff', padding: '1rem', borderRadius: '50%', cursor: 'pointer', zIndex: 100,
             boxShadow: '0 10px 30px rgba(0,0,0,0.4)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}
           onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
@@ -380,16 +383,11 @@ export default function WebARViewer({ backgroundImageUrl, modelUrl }: WebARViewe
             rotation={[camPitch * (Math.PI / 180), camYaw * (Math.PI / 180), 0]}
             fov={camFov}
           />
-          
+
           <ambientLight color="#ffffff" intensity={0.5} />
-          <directionalLight color="#ffffff" position={[5, 5, 5]} intensity={1} />
-          
-          <Environment resolution={128}>
-            <mesh scale={100}>
-              <sphereGeometry args={[1, 16, 16]} />
-              <meshBasicMaterial color="#ffffff" side={THREE.BackSide} />
-            </mesh>
-          </Environment>
+          <ambientLight color={ambientLightColor} intensity={ambientLightIntensity} />
+          <Environment preset="city" background={false} />
+
 
           {activeObject && (
             <React.Suspense fallback={null}>
