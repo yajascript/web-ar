@@ -9,23 +9,7 @@ import ModelRenderer from '../components/ModelRenderer';
 import ThumbnailCard from '../components/ThumbnailCard';
 import FloatingControls from '../components/FloatingControls';
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      'model-viewer': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-        src?: string;
-        'camera-controls'?: boolean | string;
-        'auto-rotate'?: boolean | string;
-        'shadow-intensity'?: string | number;
-        'shadow-softness'?: string | number;
-        'ar-modes'?: string;
-        'camera-orbit'?: string;
-        'interaction-prompt'?: string;
-        scale?: string;
-      };
-    }
-  }
-}
+
 export type PlacedObject = {
   instanceId: string;
   modelId: string;
@@ -88,6 +72,8 @@ export default function SpatialPlayground(): React.JSX.Element {
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           setDynamicModels(data);
+          // Preload all models in the background so thumbnails render instantly
+          data.forEach((m: any) => useGLTF.preload(m.src));
         }
       })
       .catch(err => console.error("Failed to load models", err));
