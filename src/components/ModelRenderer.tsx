@@ -2,21 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGLTF, useHelper } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { PlacedObject } from '../app/page';
+import type { PlacedObject } from './WebARViewer';
 
 export default function ModelRenderer({
   object,
   isSelected,
   onSelect,
   updateObject,
-  interactionMode,
   ambientLightColor
 }: {
   object: PlacedObject;
   isSelected: boolean;
   onSelect: () => void;
   updateObject: (id: string, updates: Partial<PlacedObject>) => void;
-  interactionMode: 'move' | 'rotate' | 'scale';
   ambientLightColor?: string;
 }) {
   const { scene } = useGLTF(object.src);
@@ -169,13 +167,14 @@ export default function ModelRenderer({
       onPointerDown={(e) => {
         e.stopPropagation(); // ALWAYS block raycast penetration! Only frontmost gets this!
         onSelect();
-        if (interactionMode === 'rotate') {
+        
+        // Right click (button 2) or Shift+Left Click = Rotate
+        if (e.button === 2 || e.shiftKey) {
           setIsRotating(true);
           pointerRef.current = { x: e.clientX, y: e.clientY };
-        } else if (interactionMode === 'scale') {
-          setIsScaling(true);
-          pointerRef.current = { x: e.clientX, y: e.clientY };
-        } else if (interactionMode === 'move') {
+        } 
+        // Left click (button 0) = Move
+        else if (e.button === 0) {
           setIsMoving(true);
           
           // The EXACT 3D point where the user clicked the mesh
