@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useGLTF } from '@react-three/drei';
+import { useGLTF, useHelper } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Select } from '@react-three/postprocessing';
 import type { PlacedObject } from '../app/page';
 
 export default function ModelRenderer({
@@ -49,6 +48,10 @@ export default function ModelRenderer({
   const offsetRef = useRef(new THREE.Vector3());
   const dragPlaneYRef = useRef(0);
   const { camera, gl } = useThree();
+
+  // Use a BoxHelper when the object is selected
+  // We type assertion to any because useHelper typings can be strict about Group vs Object3D
+  useHelper(isSelected ? (groupRef as React.MutableRefObject<THREE.Object3D>) : null, THREE.BoxHelper, '#3b82f6');
 
   useEffect(() => {
     clonedScene.traverse((child) => {
@@ -188,9 +191,7 @@ export default function ModelRenderer({
         }
       }}
     >
-      <Select enabled={isSelected}>
-        <primitive object={clonedScene} />
-      </Select>
+      <primitive object={clonedScene} />
     </group>
   );
 }

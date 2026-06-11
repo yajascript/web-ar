@@ -4,7 +4,6 @@ import React, { useState, ChangeEvent, useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { PerspectiveCamera, useGLTF, Environment, DragControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { EffectComposer, Outline, Selection, Select } from '@react-three/postprocessing';
 import styles from './page.module.css';
 import ModelRenderer from '../components/ModelRenderer';
 import ThumbnailCard from '../components/ThumbnailCard';
@@ -43,6 +42,8 @@ export type PlacedObject = {
 };
 
 export default function SpatialPlayground(): React.JSX.Element {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   const [uploadedSceneUrl, setUploadedSceneUrl] = useState<string | null>(null);
   const [isSelected, setIsSelected] = useState(false);
   const [interactionMode, setInteractionMode] = useState<'move' | 'rotate' | 'scale'>('move');
@@ -71,6 +72,10 @@ export default function SpatialPlayground(): React.JSX.Element {
 
   const [isExporting, setIsExporting] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Overlay State
+  const [showModelsOverlay, setShowModelsOverlay] = useState(false);
+  const [showRoomsOverlay, setShowRoomsOverlay] = useState(false);
 
   // Dynamic Models State
   const [dynamicModels, setDynamicModels] = useState<any[]>([]);
@@ -391,76 +396,7 @@ export default function SpatialPlayground(): React.JSX.Element {
   return (
     <main className={styles.main}>
       <div className={styles.container}>
-        <aside className={styles.sidebar}>
-          <header className={styles.header}>
-            <h1>Web AR</h1>
-          </header>
-
-          {/* Environment Section */}
-          <div className={styles.sectionTitle}>Environment</div>
-          <div className={styles.controlGroup}>
-            <label className={styles.uploadBtn}>
-              <div className={styles.uploadBtnIcon}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                  <polyline points="21 15 16 10 5 21"></polyline>
-                </svg>
-              </div>
-              <div className={styles.uploadBtnText}>
-                <span className={styles.uploadBtnTitle}>Upload Image</span>
-              </div>
-              <input type="file" accept="image/*" onChange={handleFileUpload} hidden />
-            </label>
-          </div>
-
-          <div className={styles.bgGrid}>
-            {[...uploadedImages, ...dynamicRooms].map(bg => (
-              <ThumbnailCard
-                key={bg.id}
-                isActive={uploadedSceneUrl === bg.src}
-                onClick={() => { setUploadedSceneUrl(bg.src); }}
-                name={bg.name}
-                imageSrc={bg.src}
-              />
-            ))}
-          </div>
-
-
-          <div className={styles.sectionTitle} style={{ marginTop: '2rem' }}>Object</div>
-          <div className={styles.bgGrid}>
-            {dynamicModels.map(m => (
-              <ThumbnailCard
-                key={m.id}
-                disabled={!uploadedSceneUrl}
-                isActive={false}
-                onClick={() => {
-                  if (!uploadedSceneUrl) return;
-                  const newObj: PlacedObject = {
-                    instanceId: Math.random().toString(36).substr(2, 9),
-                    modelId: m.id,
-                    src: m.src,
-                    scale: 1.0,
-                    rotationX: 0,
-                    rotationY: 0,
-                    rotationZ: 0,
-                    positionX: 0,
-                    positionY: 0,
-                    positionZ: -3,
-                    matchLighting: false
-                  };
-                  setPlacedObjects(prev => [...prev, newObj]);
-                  setSelectedObjectId(newObj.instanceId);
-                  setInteractionMode('move');
-                }}
-                name={m.name}
-                modelSrc={m.src}
-              />
-            ))}
-          </div>
-        </aside>
-
-        <section className={styles.viewport} style={{ position: 'relative' }}>
+        <section className={styles.viewport} style={{ position: 'relative', padding: 0 }}>
           {selectedObjectId && placedObjects.find(o => o.instanceId === selectedObjectId) && (
             <FloatingControls
               activeObject={placedObjects.find(o => o.instanceId === selectedObjectId)!}
@@ -472,59 +408,19 @@ export default function SpatialPlayground(): React.JSX.Element {
                 setPlacedObjects(prev => prev.filter(obj => obj.instanceId !== selectedObjectId));
                 setSelectedObjectId(null);
               }}
+              onShowShortcuts={() => setShowShortcuts(prev => !prev)}
             />
           )}
+
+
+
+
 
           {uploadedSceneUrl ? (
             <div
               className={styles.canvasCompositeBridge}
               style={{ touchAction: 'none' }}
             >
-              {uploadedSceneUrl && placedObjects.length > 0 && (
-                <button
-                  onClick={handleExportPhoto}
-                  disabled={isExporting}
-                  style={{
-                    position: 'absolute', bottom: '2rem', right: '2rem', zIndex: 10,
-                    background: '#3b82f6', color: 'white', border: 'none',
-                    padding: '1rem', borderRadius: '50%', cursor: 'pointer',
-                    boxShadow: '0 8px 20px rgba(59, 130, 246, 0.4)', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                  title="Export Photo"
-                >
-                  {isExporting ? (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                      <circle cx="12" cy="13" r="4">
-                        <animate attributeName="r" values="4;1;4" dur="0.3s" repeatCount="indefinite" />
-                      </circle>
-                      <animate attributeName="opacity" values="1;0.5;1" dur="0.3s" repeatCount="indefinite" />
-                    </svg>
-                  ) : (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>
-                    </svg>
-                  )}
-                </button>
-              )}
-
-              {/* Shortcuts Modal Button */}
-              <button 
-                onClick={() => setShowShortcuts(true)}
-                style={{
-                  position: 'absolute', bottom: '2rem', left: '2rem', zIndex: 10,
-                  background: 'rgba(0,0,0,0.5)', color: 'white', border: '1px solid rgba(255,255,255,0.2)',
-                  width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
-                }}
-                title="Keyboard Shortcuts"
-              >
-                ?
-              </button>
-
               {/* Shortcuts Modal */}
               {showShortcuts && (
                 <div style={{
@@ -581,14 +477,9 @@ export default function SpatialPlayground(): React.JSX.Element {
                     </mesh>
                   </Environment>
 
-                  <Selection>
-                    <EffectComposer autoClear={false} multisampling={8}>
-                      <Outline blur visibleEdgeColor={0xffffff} edgeStrength={2.0} width={1000} />
-                    </EffectComposer>
-
-                    {placedObjects.map(obj => (
-                      <React.Suspense key={`${obj.instanceId}-${obj.resetKey || 0}`} fallback={null}>
-                        <ModelRenderer
+                  {placedObjects.map(obj => (
+                    <React.Suspense key={`${obj.instanceId}-${obj.resetKey || 0}`} fallback={null}>
+                      <ModelRenderer
                           object={obj}
                           isSelected={selectedObjectId === obj.instanceId}
                           onSelect={() => {
@@ -602,7 +493,6 @@ export default function SpatialPlayground(): React.JSX.Element {
                         />
                       </React.Suspense>
                     ))}
-                  </Selection>
                 </Canvas>
               </div>
             </div>
@@ -615,21 +505,161 @@ export default function SpatialPlayground(): React.JSX.Element {
                   <line x1="12" y1="22.08" x2="12" y2="12"></line>
                 </svg>
               </div>
-              <h2>Step 1: Set the Scene</h2>
-              <p>Upload a photo of your room or choose a template from the sidebar to get started.</p>
-              <label className={styles.uploadBtn} style={{ marginTop: '1.5rem', width: 'auto', padding: '1rem 2rem', marginBottom: 0 }}>
-                <div className={styles.uploadBtnIcon} style={{ width: '24px', height: '24px', background: 'transparent' }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                    <polyline points="21 15 16 10 5 21"></polyline>
-                  </svg>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>Choose a Scene</h2>
+              <p style={{ color: '#888', marginBottom: '2rem' }}>Upload a photo or select a preloaded environment below.</p>
+              
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', marginBottom: '3rem' }}>
+                <label className={styles.uploadBtn} style={{ width: 'auto', padding: '1rem 2rem', margin: 0 }}>
+                  <div className={styles.uploadBtnIcon} style={{ width: '24px', height: '24px', background: 'transparent' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                  </div>
+                  <div className={styles.uploadBtnText}>
+                    <span className={styles.uploadBtnTitle}>Upload Image</span>
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleFileUpload} hidden />
+                </label>
+              </div>
+
+              <div style={{ width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <h3 style={{ fontSize: '1rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1rem' }}>Or Start With a Preloaded Scene</h3>
+                <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
+                  {[...uploadedImages, ...dynamicRooms].map(bg => (
+                    <ThumbnailCard
+                      key={bg.id}
+                      isActive={uploadedSceneUrl === bg.src}
+                      onClick={() => setUploadedSceneUrl(bg.src)}
+                      name={bg.name}
+                      imageSrc={bg.src}
+                    />
+                  ))}
                 </div>
-                <div className={styles.uploadBtnText}>
-                  <span className={styles.uploadBtnTitle}>Upload Image</span>
+              </div>
+            </div>
+          )}
+
+          {/* Top Center Header Bar */}
+          {uploadedSceneUrl && (
+            <div style={{ position: 'absolute', top: 'max(1.5rem, env(safe-area-inset-top))', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: 'rgba(25,28,33,0.7)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', padding: isMobile ? '0.3rem' : '0.4rem', borderRadius: '40px', gap: isMobile ? '0.2rem' : '0.4rem', zIndex: 100, boxShadow: '0 10px 30px rgba(0,0,0,0.3)', width: isMobile ? 'max-content' : 'auto' }}>
+              <button onClick={() => setShowRoomsOverlay(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', padding: isMobile ? '0.4rem 0.8rem' : '0.6rem 1.2rem', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s', fontSize: isMobile ? '0.8rem' : '1rem' }} onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }} onMouseLeave={(e) => { e.currentTarget.style.color = '#ccc'; e.currentTarget.style.background = 'transparent'; }}>
+                <svg width={isMobile ? "14" : "18"} height={isMobile ? "14" : "18"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                {isMobile ? 'Room' : 'Change Room'}
+              </button>
+              
+              <button onClick={() => setShowModelsOverlay(true)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', padding: isMobile ? '0.4rem 0.8rem' : '0.6rem 1.2rem', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s', fontSize: isMobile ? '0.8rem' : '1rem' }} onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}>
+                <svg width={isMobile ? "14" : "18"} height={isMobile ? "14" : "18"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Add Object
+              </button>
+
+              {selectedObjectId && (
+                <>
+                  <div style={{ width: '1px', height: isMobile ? '16px' : '24px', background: 'rgba(255,255,255,0.1)', margin: '0 0.2rem' }} />
+                  <button onClick={() => setSelectedObjectId(null)} style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', padding: isMobile ? '0.4rem 0.8rem' : '0.6rem 1.2rem', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s', fontSize: isMobile ? '0.8rem' : '1rem' }} onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.25)'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)'; }}>
+                    <svg width={isMobile ? "14" : "18"} height={isMobile ? "14" : "18"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Done
+                  </button>
+                </>
+              )}
+
+              {placedObjects.length > 0 && !selectedObjectId && (
+                <>
+                  <div style={{ width: '1px', height: isMobile ? '16px' : '24px', background: 'rgba(255,255,255,0.1)', margin: '0 0.2rem' }} />
+                  <button onClick={handleExportPhoto} disabled={isExporting} style={{ background: 'transparent', border: 'none', color: '#ccc', padding: isMobile ? '0.4rem 0.8rem' : '0.6rem 1.2rem', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s', fontSize: isMobile ? '0.8rem' : '1rem' }} onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }} onMouseLeave={(e) => { e.currentTarget.style.color = '#ccc'; e.currentTarget.style.background = 'transparent'; }}>
+                    <svg width={isMobile ? "14" : "18"} height={isMobile ? "14" : "18"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                    Export
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Models Overlay Lightbox */}
+          {showModelsOverlay && (
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { if (e.target === e.currentTarget) setShowModelsOverlay(false); }}>
+              <div style={{ background: '#12141a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '90%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Choose an Object</h2>
+                  <button onClick={() => setShowModelsOverlay(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
                 </div>
-                <input type="file" accept="image/*" onChange={handleFileUpload} hidden />
-              </label>
+                <div style={{ padding: '2rem', overflowY: 'auto' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1.5rem' }}>
+                    {dynamicModels.map(m => (
+                      <ThumbnailCard
+                        key={m.id}
+                        disabled={!uploadedSceneUrl}
+                        isActive={false}
+                        onClick={() => {
+                          if (!uploadedSceneUrl) return;
+                          const newObj: PlacedObject = {
+                            instanceId: Math.random().toString(36).substr(2, 9),
+                            modelId: m.id,
+                            src: m.src,
+                            scale: 1.0,
+                            rotationX: 0,
+                            rotationY: 0,
+                            rotationZ: 0,
+                            positionX: 0,
+                            positionY: 0,
+                            positionZ: -3,
+                            matchLighting: false
+                          };
+                          setPlacedObjects(prev => [...prev, newObj]);
+                          setSelectedObjectId(newObj.instanceId);
+                          setInteractionMode('move');
+                          setShowModelsOverlay(false); // Close modal on select
+                        }}
+                        name={m.name}
+                        modelSrc={m.src}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rooms Overlay Lightbox */}
+          {showRoomsOverlay && (
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { if (e.target === e.currentTarget) setShowRoomsOverlay(false); }}>
+              <div style={{ background: '#12141a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '90%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Choose an Environment</h2>
+                  <button onClick={() => setShowRoomsOverlay(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+                </div>
+                
+                <div style={{ padding: '2rem', overflowY: 'auto' }}>
+                  <div style={{ marginBottom: '2rem' }}>
+                    <label className={styles.uploadBtn} style={{ width: 'max-content', padding: '1rem 2rem' }}>
+                      <div className={styles.uploadBtnIcon} style={{ width: '24px', height: '24px', background: 'transparent' }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                      </div>
+                      <div className={styles.uploadBtnText}>
+                        <span className={styles.uploadBtnTitle}>Upload Custom Image</span>
+                      </div>
+                      <input type="file" accept="image/*" onChange={(e) => { handleFileUpload(e); setShowRoomsOverlay(false); }} hidden />
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1.5rem' }}>
+                    {[...uploadedImages, ...dynamicRooms].map(bg => (
+                      <ThumbnailCard
+                        key={bg.id}
+                        isActive={uploadedSceneUrl === bg.src}
+                        onClick={() => { setUploadedSceneUrl(bg.src); setShowRoomsOverlay(false); }}
+                        name={bg.name}
+                        imageSrc={bg.src}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </section>

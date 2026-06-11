@@ -7,7 +7,8 @@ export default function FloatingControls({
   interactionMode,
   setInteractionMode,
   onClose,
-  onRemove
+  onRemove,
+  onShowShortcuts
 }: {
   activeObject: PlacedObject;
   updateObject: (id: string, updates: Partial<PlacedObject>) => void;
@@ -15,126 +16,124 @@ export default function FloatingControls({
   setInteractionMode: (mode: 'move' | 'rotate' | 'scale') => void;
   onClose: () => void;
   onRemove: () => void;
+  onShowShortcuts: () => void;
 }) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
     <>
-      {/* Primary Interaction Bar (Bottom Center) */}
+      {/* Bottom Action Bar */}
       <div style={{ 
-        display: 'flex', alignItems: 'center', gap: '1.5rem', 
-        position: 'absolute', bottom: '3rem', left: '50%', transform: 'translateX(-50%)', 
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+        position: 'absolute', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', 
         background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', 
         border: '1px solid rgba(255,255,255,0.2)', borderRadius: '40px', 
-        padding: '0.8rem 1.5rem', zIndex: 100, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', width: 'auto' 
+        padding: '0.6rem 0.8rem', zIndex: 100, 
+        boxShadow: '0 10px 30px rgba(0,0,0,0.5)', width: isMobile ? '240px' : '300px',
       }}>
         {/* Mode Toggle */}
-        <div style={{ position: 'relative', display: 'flex', background: 'rgba(255,255,255,0.1)', borderRadius: '20px', padding: '4px', width: '160px' }}>
+        <div style={{ position: 'relative', display: 'flex', background: 'rgba(255,255,255,0.1)', borderRadius: '20px', padding: '4px', flex: 1 }}>
           <div style={{
             position: 'absolute', top: '4px', bottom: '4px',
-            left: interactionMode === 'move' ? '4px' : interactionMode === 'rotate' ? 'calc(50% + 2px)' : '4px', // default to move visually if scale is selected
+            left: interactionMode === 'move' ? '4px' : 'calc(50% + 2px)',
             width: 'calc(50% - 6px)',
             background: '#3b82f6', borderRadius: '16px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
           }} />
-          <button onClick={() => setInteractionMode('move')} style={{ position: 'relative', zIndex: 1, background: 'transparent', border: 'none', color: '#fff', borderRadius: '16px', padding: '0.4rem 0', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', flex: 1 }}>Move</button>
-          <button onClick={() => setInteractionMode('rotate')} style={{ position: 'relative', zIndex: 1, background: 'transparent', border: 'none', color: '#fff', borderRadius: '16px', padding: '0.4rem 0', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', flex: 1 }}>Rotate</button>
+          <button onClick={() => setInteractionMode('move')} style={{ position: 'relative', zIndex: 1, background: 'transparent', border: 'none', color: '#fff', borderRadius: '16px', padding: '0.6rem 0', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', flex: 1 }}>MOVE</button>
+          <button onClick={() => setInteractionMode('rotate')} style={{ position: 'relative', zIndex: 1, background: 'transparent', border: 'none', color: '#fff', borderRadius: '16px', padding: '0.6rem 0', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', flex: 1 }}>ROTATE</button>
         </div>
-
-        <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.2)' }} />
-
-        {/* Scale Slider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '250px' }}>
-          <span style={{ color: '#ccc', fontSize: '0.8rem', fontWeight: 'bold' }}>Size</span>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <input
-              type="range" min="0.25" max="3" step="any"
-              list="scale-ticks"
-              value={activeObject.scale}
-              onChange={(e) => {
-                updateObject(activeObject.instanceId, { scale: parseFloat(e.target.value) });
-              }}
-              style={{ width: '100%', cursor: 'pointer', margin: 0, position: 'relative', zIndex: 1 }}
-            />
-            <datalist id="scale-ticks">
-              <option value="0.25" />
-              <option value="0.5" />
-              <option value="0.75" />
-              <option value="1" />
-              <option value="1.5" />
-              <option value="2" />
-              <option value="2.5" />
-              <option value="3" />
-            </datalist>
-            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, color: '#888', fontSize: '0.55rem', fontWeight: 'bold', pointerEvents: 'none', marginTop: '4px' }}>
-              <span style={{ position: 'absolute', left: '0%', transform: 'translateX(0%)' }}>0.25x</span>
-              <span style={{ position: 'absolute', left: `${((1 - 0.25) / 2.75) * 100}%`, transform: 'translateX(-50%)' }}>1x</span>
-              <span style={{ position: 'absolute', left: `${((2 - 0.25) / 2.75) * 100}%`, transform: 'translateX(-50%)' }}>2x</span>
-              <span style={{ position: 'absolute', left: '100%', transform: 'translateX(-100%)' }}>3x</span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.2)' }} />
-
-        {/* Done */}
-        <button onClick={onClose} style={{ background: '#10b981', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '20px' }} title="Deselect">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          Done
-        </button>
       </div>
 
-      {/* Secondary Actions Bar (Right Panel) */}
+      {/* Unified Right Toolbar */}
       <div style={{
-        position: 'absolute', top: '2rem', right: '2rem', minWidth: '200px',
-        background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
-        border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px',
-        padding: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.8rem',
-        zIndex: 100, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', width: 'auto'
+        position: 'absolute', top: '50%', transform: 'translateY(-50%)', right: '1.5rem',
+        background: 'rgba(25,28,33,0.7)', backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255,255,255,0.1)', borderRadius: '40px',
+        padding: '1rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem',
+        zIndex: 100, boxShadow: '0 10px 30px rgba(0,0,0,0.3)', width: '56px'
       }}>
-        <div style={{ color: 'white', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem', opacity: 0.7 }}>Object Tools</div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.6rem 1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', marginBottom: '0.2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', fontSize: '0.8rem', fontWeight: 500 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-            <span>Ambient Light</span>
-          </div>
-          <div 
-            onClick={() => updateObject(activeObject.instanceId, { matchLighting: !activeObject.matchLighting })}
-            style={{ 
-              width: '40px', height: '22px', borderRadius: '11px', flexShrink: 0,
-              background: activeObject.matchLighting ? '#3b82f6' : 'rgba(255,255,255,0.2)', 
-              position: 'relative', cursor: 'pointer', transition: 'background 0.3s'
-            }}>
+        {/* Ambient Light Toggle */}
+        <button 
+          onClick={() => updateObject(activeObject.instanceId, { matchLighting: !activeObject.matchLighting })}
+          style={{ background: 'transparent', border: 'none', color: activeObject.matchLighting ? '#fcd34d' : '#ccc', cursor: 'pointer', padding: 0, transition: 'color 0.2s' }}
+          onMouseEnter={(e) => { if (!activeObject.matchLighting) e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={(e) => { if (!activeObject.matchLighting) e.currentTarget.style.color = '#ccc'; }}
+          title="Toggle Ambient Light"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        </button>
+
+        {/* Reset Position & Rotation */}
+        <button 
+          onClick={() => updateObject(activeObject.instanceId, { positionX: 0, positionY: 0, positionZ: -3, rotationX: 0, rotationY: 0, rotationZ: 0, resetKey: (activeObject.resetKey || 0) + 1 })}
+          style={{ background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', padding: 0, transition: 'color 0.2s' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#ccc'}
+          title="Reset Position & Rotation"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+        </button>
+
+        {/* Keyboard Shortcuts */}
+        <button 
+          onClick={onShowShortcuts}
+          style={{ background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', padding: 0, transition: 'color 0.2s' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#ccc'}
+          title="Keyboard Shortcuts"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        </button>
+
+        {/* Delete Button */}
+        <button 
+          onClick={onRemove} 
+          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, transition: 'transform 0.2s' }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          title="Delete Object"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+
+        <div style={{ width: '32px', height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+
+        {/* Scale Slider Pill (Vertical) */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem', height: '180px' }}>
+          <span 
+            onClick={() => updateObject(activeObject.instanceId, { scale: 1.0 })}
+            style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center' }}
+            title="Reset Scale"
+          >
+            {activeObject.scale.toFixed(1)}x
+          </span>
+          <div style={{ flex: 1, position: 'relative', width: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <div style={{
-              width: '18px', height: '18px', borderRadius: '50%', background: 'white',
-              position: 'absolute', top: '2px', left: activeObject.matchLighting ? '20px' : '2px',
-              transition: 'left 0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }} />
+              position: 'absolute', top: '50%', left: '50%', width: '100px', height: '4px',
+              transform: 'translate(-50%, -50%) rotate(-90deg)', pointerEvents: 'none', zIndex: 10
+            }}>
+              <div style={{ position: 'absolute', left: '27.27%', top: '-3px', width: '2px', height: '10px', background: 'rgba(255,255,255,0.8)', borderRadius: '1px' }} />
+            </div>
+
+            <input
+              type="range" min="0.25" max="3" step="any"
+              value={activeObject.scale}
+              onChange={(e) => {
+                let val = parseFloat(e.target.value);
+                if (Math.abs(val - 1.0) < 0.1) val = 1.0;
+                updateObject(activeObject.instanceId, { scale: val });
+              }}
+              style={{ 
+                position: 'absolute',
+                width: '100px', cursor: 'pointer', margin: 0, height: '4px', 
+                accentColor: '#fff', background: 'rgba(255,255,255,0.2)', 
+                borderRadius: '2px', outline: 'none',
+                transform: 'rotate(-90deg)', transformOrigin: 'center'
+              }}
+            />
           </div>
+          <span style={{ color: '#888', fontSize: '0.6rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>Scale</span>
         </div>
-
-        <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', margin: '0.1rem 0' }} />
-
-        <button onClick={() => updateObject(activeObject.instanceId, { positionX: 0, positionY: 0, positionZ: -3, resetKey: (activeObject.resetKey || 0) + 1 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
-          Reset Position
-        </button>
-        <button onClick={() => updateObject(activeObject.instanceId, { rotationX: 0, rotationY: 0, rotationZ: 0 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
-          Reset Rotation
-        </button>
-        <button onClick={() => updateObject(activeObject.instanceId, { scale: 1.0 })} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
-          Reset Size
-        </button>
-
-        <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', margin: '0.4rem 0' }} />
-
-        <button onClick={onRemove} style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '0.6rem 1rem', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 500 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          Delete Object
-        </button>
-
       </div>
     </>
   );
